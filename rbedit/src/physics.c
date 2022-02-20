@@ -172,15 +172,17 @@ frBody *GetPhysicsObjectAt(Vector2 position) {
         temp_bodies
     );
 
+    int j = -1;
+
     for (int i = 0; i < count; i++) {
         if (frShapeContainsPoint(
             frGetBodyShape(temp_bodies[i]),
             frGetBodyTransform(temp_bodies[i]),
             frVec2PixelsToMeters(position)
-        )) return temp_bodies[i];
+        )) { if (j < i) j = i; }
     }
 
-    return NULL;
+    return (j >= 0) ? temp_bodies[j] : NULL;
 }
 
 /* 게임 세계의 메모리 주소를 반환한다. */
