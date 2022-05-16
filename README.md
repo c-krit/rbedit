@@ -41,8 +41,7 @@ This project uses [GNU Make](https://www.gnu.org/software/make) as the build sys
 1. Clone this repository
 
 ```console
-$ git clone https://github.com/c-krit/rbedit
-$ cd rbedit
+$ git clone https://github.com/c-krit/rbedit && cd rbedit
 ```
 
 2. Build [raylib](https://github.com/raysan5/raylib) and [ferox](https://github.com/c-krit/ferox) in `rbedit/lib` directory

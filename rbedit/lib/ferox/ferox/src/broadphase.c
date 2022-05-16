@@ -34,9 +34,10 @@ typedef struct frSpatialEntry {
 /* 공간 해시맵을 나타내는 구조체. */
 typedef struct frSpatialHash {
     Rectangle bounds;
-    float cell_size;
-    float inverse_cell_size;
-    frSpatialEntry *map;
+    float cellSize;
+    float inverseCellSize;
+    frSpatialEntry *entries;
+    int *queryCache;
 } frSpatialHash;
 
 /* | `broadphase` 모듈 함수... | */
@@ -44,15 +45,15 @@ typedef struct frSpatialHash {
 /* C 표준 라이브러리의 `qsort()` 함수 호출에 사용되는 비교 함수이다. */
 static int frQuickSortCallback(const void *x, const void *y);
 
-/* 경계 범위가 `bounds`이고 각 셀의 크기가 `cell_size`인 공간 해시맵의 메모리 주소를 반환한다. */
-frSpatialHash *frCreateSpatialHash(Rectangle bounds, float cell_size) {
-    if (cell_size <= 0.0f) return NULL;
+/* 경계 범위가 `bounds`이고 각 셀의 크기가 `cellSize`인 공간 해시맵의 메모리 주소를 반환한다. */
+frSpatialHash *frCreateSpatialHash(Rectangle bounds, float cellSize) {
+    if (cellSize <= 0.0f) return NULL;
     
     frSpatialHash *result = calloc(1, sizeof(frSpatialHash));
     
     result->bounds = bounds;
-    result->cell_size = cell_size;
-    result->inverse_cell_size = 1.0f / cell_size;
+    result->cellSize = cellSize;
+    result->inverseCellSize = 1.0f / cellSize;
     
     return result;
 }
@@ -61,10 +62,11 @@ frSpatialHash *frCreateSpatialHash(Rectangle bounds, float cell_size) {
 void frReleaseSpatialHash(frSpatialHash *hash) {
     if (hash == NULL) return; 
     
-    for (int i = 0; i < hmlen(hash->map); i++)
-        arrfree(hash->map[i].values);
+    for (int i = 0; i < hmlen(hash->entries); i++)
+        arrfree(hash->entries[i].values);
     
-    hmfree(hash->map);
+    hmfree(hash->entries);
+
     free(hash);
 }
 
@@ -80,15 +82,17 @@ void frAddToSpatialHash(frSpatialHash *hash, Rectangle rec, int value) {
     
     for (int y = y0; y <= y1; y += hash->bounds.width) {
         for (int x = x0; x <= x1; x++) {
-            frSpatialEntry *entry = hmgetp_null(hash->map, x + y);
+            const int key = x + y;
+
+            frSpatialEntry *entry = hmgetp_null(hash->entries, key);
             
             if (entry != NULL) {
                 arrput(entry->values, value);
             } else {
-                frSpatialEntry entry = { x + y, NULL };
+                frSpatialEntry newEntry = { .key = key };
 
-                arrput(entry.values, value);
-                hmputs(hash->map, entry);
+                arrput(newEntry.values, value);
+                hmputs(hash->entries, newEntry);
             }
         }
     }
@@ -98,23 +102,23 @@ void frAddToSpatialHash(frSpatialHash *hash, Rectangle rec, int value) {
 void frClearSpatialHash(frSpatialHash *hash) {
     if (hash == NULL) return;
     
-    for (int i = 0; i < hmlen(hash->map); i++)
-        arrdeln(hash->map[i].values, 0, arrlen(hash->map[i].values));
+    for (int i = 0; i < hmlen(hash->entries); i++)
+        arrsetlen(hash->entries[i].values, 0);
 }
 
 /* 공간 해시맵 `hash`에서 키가 `key`인 값을 제거한다. */
 void frRemoveFromSpatialHash(frSpatialHash *hash, int key) {
     if (hash == NULL) return;
     
-    frSpatialEntry entry = hmgets(hash->map, key);
+    frSpatialEntry entry = hmgets(hash->entries, key);
     arrfree(entry.values);
     
-    hmdel(hash->map, key);
+    hmdel(hash->entries, key);
 }
 
-/* 공간 해시맵 `hash`에서 직사각형 `rec`와 경계 범위가 겹치는 모든 도형의 인덱스를 반환한다. */
-void frQuerySpatialHash(frSpatialHash *hash, Rectangle rec, int **queries) {
-    if (hash == NULL || queries == NULL || !CheckCollisionRecs(hash->bounds, rec)) return;
+/* 공간 해시맵 `hash`에서 직사각형 `rec`와 경계 범위가 겹치는 모든 강체의 인덱스를 반환한다. */
+void frQuerySpatialHash(frSpatialHash *hash, Rectangle rec, int **result) {
+    if (hash == NULL || result == NULL || !CheckCollisionRecs(hash->bounds, rec)) return;
     
     int x0 = frComputeSpatialHashKey(hash, (Vector2) { .x = rec.x });
     int x1 = frComputeSpatialHashKey(hash, (Vector2) { .x = rec.x + rec.width });
@@ -124,21 +128,40 @@ void frQuerySpatialHash(frSpatialHash *hash, Rectangle rec, int **queries) {
     
     for (int y = y0; y <= y1; y += hash->bounds.width) {
         for (int x = x0; x <= x1; x++) {
-            frSpatialEntry *entry = hmgetp_null(hash->map, x + y);
+            const int key = x + y;
 
-            if (entry != NULL) 
+            // 주어진 셀과 만나는 모든 강체의 인덱스를 구한다.
+            frSpatialEntry *entry = hmgetp_null(hash->entries, key);
+
+            if (entry != NULL) {
                 for (int j = 0; j < arrlen(entry->values); j++)
-                    arrput(*queries, entry->values[j]);
+                    arrput(*result, entry->values[j]);
+            }
         }
     }
 
-    if (arrlen(*queries) <= 0) return;
+    const int oldLength = arrlen(*result);
+
+    if (oldLength <= 1) return;
     
-    qsort(*queries, arrlen(*queries), sizeof(int), frQuickSortCallback);
+    // 결과 배열을 먼저 퀵-정렬한다.
+    qsort(*result, oldLength, sizeof(int), frQuickSortCallback);
+
+    arrsetlen(hash->queryCache, 0);
     
-    for (int i = 0; i < arrlen(*queries); i++)
-        while ((i + 1) < arrlen(*queries) && (*queries)[i + 1] == (*queries)[i])
-            arrdel(*queries, i + 1);
+    // 결과 배열에서 고유 값만 따로 저장한다.
+    for (int i = 0; i < oldLength; i++) {
+        const int newLength = arrlen(hash->queryCache);
+
+        if (newLength == 0 || hash->queryCache[newLength - 1] != (*result)[i])
+            arrput(hash->queryCache, (*result)[i]);
+    }
+
+    arrsetlen(*result, 0);
+
+    // 따로 저장한 고유 값을 결과 배열에 저장한다.
+    for (int i = 0; i < arrlen(hash->queryCache); i++)
+        arrput(*result, hash->queryCache[i]);
 }
 
 /* 공간 해시맵 `hash`의 경계 범위를 반환한다. */
@@ -148,7 +171,7 @@ Rectangle frGetSpatialHashBounds(frSpatialHash *hash) {
 
 /* 공간 해시맵 `hash`의 각 셀의 크기를 반환한다. */
 float frGetSpatialHashCellSize(frSpatialHash *hash) {
-    return (hash != NULL) ? hash->cell_size : 0.0f;
+    return (hash != NULL) ? hash->cellSize : 0.0f;
 }
 
 /* 공간 해시맵 `hash`의 경계 범위를 `bounds`로 설정한다. */
@@ -156,15 +179,15 @@ void frSetSpatialHashBounds(frSpatialHash *hash, Rectangle bounds) {
     if (hash != NULL) hash->bounds = bounds;
 }
 
-/* 공간 해시맵 `hash`의 각 셀의 크기를 `cell_size`로 설정한다. */
-void frSetSpatialHashCellSize(frSpatialHash *hash, float cell_size) {
-    if (hash != NULL) hash->cell_size = cell_size;
+/* 공간 해시맵 `hash`의 각 셀의 크기를 `cellSize`로 설정한다. */
+void frSetSpatialHashCellSize(frSpatialHash *hash, float cellSize) {
+    if (hash != NULL) hash->cellSize = cellSize;
 }
 
 /* 공간 해시맵 `hash`에서 벡터 `v`와 대응하는 키를 반환한다. */
 int frComputeSpatialHashKey(frSpatialHash *hash, Vector2 v) {
     return (hash != NULL) 
-        ? (int) (v.y * hash->inverse_cell_size) * hash->bounds.width + (int) (v.x * hash->inverse_cell_size)
+        ? (int) (v.y * hash->inverseCellSize) * hash->bounds.width + (int) (v.x * hash->inverseCellSize)
         : -1;
 }
 

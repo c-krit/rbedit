@@ -34,6 +34,8 @@ const float ARROW_HEAD_LENGTH = 16.0f;
 
     /* 게임 화면에 점 `p1`에서 `p2`로 향하는 화살표를 그린다. */
     void frDrawArrow(Vector2 p1, Vector2 p2, float thick, Color color) {
+        if (thick <= 0.0f) return;
+        
         p1 = frVec2MetersToPixels(p1);
         p2 = frVec2MetersToPixels(p2);
 
@@ -65,7 +67,7 @@ const float ARROW_HEAD_LENGTH = 16.0f;
 
     /* 게임 화면에 강체 `b`의 도형을 그린다. */
     void frDrawBody(frBody *b, Color color) {
-        if (b == NULL || frGetBodyShape(b) == NULL) return;
+        if (b == NULL) return;
         
         frShape *s = frGetBodyShape(b);
         
@@ -76,15 +78,15 @@ const float ARROW_HEAD_LENGTH = 16.0f;
                 color
             );
         } else if (frGetShapeType(s) == FR_SHAPE_POLYGON) {
-            frVertices world_vertices = frGetWorldVerticesInPixels(b);
+            frVertices worldVertices = frGetWorldVerticesInPixels(b);
             
-            DrawTriangleFan(world_vertices.data, world_vertices.count, color);
+            DrawTriangleFan(worldVertices.data, worldVertices.count, color);
         }
     }
 
     /* 게임 화면에 강체 `b`의 도형 테두리를 그린다. */
     void frDrawBodyLines(frBody *b, float thick, Color color) {
-        if (b == NULL || frGetBodyShape(b) == NULL) return;
+        if (b == NULL || thick <= 0.0f) return;
         
         frShape *s = frGetBodyShape(b);
         
@@ -101,16 +103,16 @@ const float ARROW_HEAD_LENGTH = 16.0f;
                 color
             );
         } else if (frGetShapeType(s) == FR_SHAPE_POLYGON) {
-            frVertices world_vertices = frGetWorldVerticesInPixels(b);
+            frVertices worldVertices = frGetWorldVerticesInPixels(b);
                 
-            for (int j = world_vertices.count - 1, i = 0; i < world_vertices.count; j = i, i++)
-                DrawLineEx(world_vertices.data[j], world_vertices.data[i], thick, color);
+            for (int j = worldVertices.count - 1, i = 0; i < worldVertices.count; j = i, i++)
+                DrawLineEx(worldVertices.data[j], worldVertices.data[i], thick, color);
         }
     }
 
     /* 게임 화면에 강체 `b`의 AABB와 질량 중심을 그린다. */
     void frDrawBodyAABB(frBody *b, float thick, Color color) {
-        if (b == NULL) return;
+        if (b == NULL || thick <= 0.0f) return;
         
         Rectangle aabb = frGetBodyAABB(b);
         
@@ -153,12 +155,14 @@ const float ARROW_HEAD_LENGTH = 16.0f;
 
     /* 게임 화면에 공간 해시맵 `hm`을 그린다. */
     void frDrawSpatialHash(frSpatialHash *hm, float thick, Color color) {
+        if (hm == NULL || thick <= 0.0f) return;
+
         Rectangle bounds = frGetSpatialHashBounds(hm);
 
-        const int v_count = bounds.width * FR_BROADPHASE_INVERSE_CELL_SIZE;
-        const int h_count = bounds.height * FR_BROADPHASE_INVERSE_CELL_SIZE;
+        const int vCount = bounds.width * FR_BROADPHASE_INVERSE_CELL_SIZE;
+        const int hCount = bounds.height * FR_BROADPHASE_INVERSE_CELL_SIZE;
         
-        for (int i = 0; i <= v_count; i++)
+        for (int i = 0; i <= vCount; i++)
             DrawLineEx(
                 frVec2MetersToPixels((Vector2) { FR_BROADPHASE_CELL_SIZE * i, 0.0f }),
                 frVec2MetersToPixels((Vector2) { FR_BROADPHASE_CELL_SIZE * i, bounds.height }),
@@ -166,7 +170,7 @@ const float ARROW_HEAD_LENGTH = 16.0f;
                 color
             );
     
-        for (int i = 0; i <= h_count; i++)
+        for (int i = 0; i <= hCount; i++)
             DrawLineEx(
                 frVec2MetersToPixels((Vector2) { 0.0f, FR_BROADPHASE_CELL_SIZE * i }), 
                 frVec2MetersToPixels((Vector2) { bounds.width, FR_BROADPHASE_CELL_SIZE * i }),
@@ -175,11 +179,6 @@ const float ARROW_HEAD_LENGTH = 16.0f;
             );
 
         DrawRectangleLinesEx(frRecMetersToPixels(bounds), thick, color);
-    }
-    
-    /* 무작위 색상을 반환한다. */
-    Color frGetRandomColor(void) {
-        return ColorFromHSV(GetRandomValue(0, 360), 1.0f, 1.0f);
     }
 
     /* 강체 `b`의 다각형 꼭짓점 배열을 세계 기준의 픽셀 좌표 배열로 변환한다. */

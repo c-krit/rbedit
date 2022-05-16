@@ -85,23 +85,23 @@ extern "C" {
 
 /* | 사용자 설정 매크로 정의... | */
 
-#define FR_BROADPHASE_CELL_SIZE                   3.0f
+#define FR_BROADPHASE_CELL_SIZE                   3.2f
 #define FR_BROADPHASE_INVERSE_CELL_SIZE           (1.0f / (FR_BROADPHASE_CELL_SIZE))
 
 #define FR_DEBUG_CIRCLE_SEGMENT_COUNT             32
 
 #define FR_DYNAMICS_CORRECTION_DEPTH_SCALE        0.24f
-#define FR_DYNAMICS_CORRECTION_DEPTH_THRESHOLD    0.01f
+#define FR_DYNAMICS_CORRECTION_DEPTH_THRESHOLD    0.02f
 #define FR_DYNAMICS_DYNAMIC_FRICTION_MULTIPLIER   0.85f
 
-#define FR_GEOMETRY_MAX_VERTEX_COUNT              10
+#define FR_GEOMETRY_MAX_VERTEX_COUNT              8
 
 #define FR_GLOBAL_PIXELS_PER_METER                16.0f
 
 #define FR_WORLD_ACCUMULATOR_LIMIT                200.0
 #define FR_WORLD_DEFAULT_GRAVITY                  ((Vector2) { .y = 9.8f })
-#define FR_WORLD_MAX_BODY_COUNT                   192
-#define FR_WORLD_MAX_ITERATIONS                   16
+#define FR_WORLD_MAX_BODY_COUNT                   256
+#define FR_WORLD_MAX_ITERATIONS                   12
 
 /* | 자료형 정의... | */
 
@@ -134,8 +134,8 @@ typedef enum frShapeType {
 typedef struct frMaterial {
     float density;
     float restitution;
-    float static_friction;
-    float dynamic_friction;
+    float staticFriction;
+    float dynamicFriction;
 } frMaterial;
 
 /* 도형 또는 강체의 위치와 회전 각도 (단위: rad.)를 나타내는 구조체. */
@@ -144,8 +144,8 @@ typedef struct frTransform {
     float rotation;
     struct {
         bool valid;
-        float sin_a;
-        float cos_a;
+        float sinA;
+        float cosA;
     } cache;
 } frTransform;
 
@@ -182,15 +182,15 @@ typedef void (*frCollisionCallback)(frCollision *collision);
 
 /* 강체 사이의 충돌 이벤트 처리에 사용되는 핸들러를 나타내는 구조체. */
 typedef struct frCollisionHandler {
-    frCollisionCallback pre_solve;
-    frCollisionCallback post_solve;
+    frCollisionCallback preSolve;
+    frCollisionCallback postSolve;
 } frCollisionHandler;
 
 /* 광선을 나타내는 구조체. */
 typedef struct frRay {
     Vector2 origin;
     Vector2 direction;
-    float max_distance;
+    float maxDistance;
     bool closest;
 } frRay;
 
@@ -219,8 +219,8 @@ extern "C" {
 
 /* | `broadphase` 모듈 함수... | */
 
-/* 경계 범위가 `bounds`이고 각 셀의 크기가 `cell_size`인 공간 해시맵의 메모리 주소를 반환한다. */
-frSpatialHash *frCreateSpatialHash(Rectangle bounds, float cell_size);
+/* 경계 범위가 `bounds`이고 각 셀의 크기가 `cellSize`인 공간 해시맵의 메모리 주소를 반환한다. */
+frSpatialHash *frCreateSpatialHash(Rectangle bounds, float cellSize);
 
 /* 공간 해시맵 `hash`에 할당된 메모리를 해제한다. */
 void frReleaseSpatialHash(frSpatialHash *hash);
@@ -234,8 +234,8 @@ void frClearSpatialHash(frSpatialHash *hash);
 /* 공간 해시맵 `hash`에서 키가 `key`인 값을 제거한다. */
 void frRemoveFromSpatialHash(frSpatialHash *hash, int key);
 
-/* 공간 해시맵 `hash`에서 직사각형 `rec`와 경계 범위가 겹치는 모든 도형의 인덱스를 반환한다. */
-void frQuerySpatialHash(frSpatialHash *hash, Rectangle rec, int **queries);
+/* 공간 해시맵 `hash`에서 직사각형 `rec`와 경계 범위가 겹치는 모든 강체의 인덱스를 반환한다. */
+void frQuerySpatialHash(frSpatialHash *hash, Rectangle rec, int **result);
 
 /* 공간 해시맵 `hash`의 경계 범위를 반환한다. */
 Rectangle frGetSpatialHashBounds(frSpatialHash *hash);
@@ -246,8 +246,8 @@ float frGetSpatialHashCellSize(frSpatialHash *hash);
 /* 공간 해시맵 `hash`의 경계 범위를 `bounds`로 설정한다. */
 void frSetSpatialHashBounds(frSpatialHash *hash, Rectangle bounds);
 
-/* 공간 해시맵 `hash`의 각 셀의 크기를 `cell_size`로 설정한다. */
-void frSetSpatialHashCellSize(frSpatialHash *hash, float cell_size);
+/* 공간 해시맵 `hash`의 각 셀의 크기를 `cellSize`로 설정한다. */
+void frSetSpatialHashCellSize(frSpatialHash *hash, float cellSize);
 
 /* 공간 해시맵 `hash`에서 벡터 `v`와 대응하는 키를 반환한다. */
 int frComputeSpatialHashKey(frSpatialHash *hash, Vector2 v);
@@ -414,7 +414,7 @@ void frIntegrateForBodyVelocities(frBody *b, double dt);
 void frResolveCollision(frCollision *collision);
 
 /* 강체 `b1`과 `b2`의 위치를 적절하게 보정한다. */
-void frCorrectBodyPositions(frCollision *collision, float inverse_dt);
+void frCorrectBodyPositions(frCollision *collision, float inverseDt);
 
 /* | `geometry` 모듈 함수... | */
 
@@ -504,11 +504,11 @@ void frInitClock(void);
 /* 단조 시계의 현재 시각 (단위: ms)을 반환한다. */
 double frGetCurrentTime(void);
 
-/* 단조 시계의 시각 `new_time`과 `old_time`의 차이를 반환한다. */
-double frGetTimeDifference(double new_time, double old_time);
+/* 단조 시계의 시각 `newTime`과 `oldTime`의 차이를 반환한다. */
+double frGetTimeDifference(double newTime, double oldTime);
 
-/* 단조 시계의 현재 시각과 `old_time`과의 차이를 반환한다. */
-double frGetTimeSince(double old_time);
+/* 단조 시계의 현재 시각과 `oldTime`과의 차이를 반환한다. */
+double frGetTimeSince(double oldTime);
 
 /* | `utils` 모듈 함수... | */
 
@@ -579,21 +579,21 @@ int frComputeWorldRaycast(frWorld *world, frRay ray, frRaycastHit *hits);
 
 /* | 인라인 함수... | */
 
-/* 주어진 픽셀 단위 거리를 미터 단위 거리로 변환한다. */
+/* 픽셀 단위의 값 `value`를 미터 단위의 값으로 변환한다. */
 FR_API_INLINE float frNumberPixelsToMeters(float value) {
     return (FR_GLOBAL_PIXELS_PER_METER > 0.0f)
         ? (value / FR_GLOBAL_PIXELS_PER_METER)
         : 0.0f;
 }
 
-/* 주어진 미터 단위 거리를 픽셀 단위 거리로 변환한다. */
+/* 미터 단위의 값 `value`를 픽셀 단위의 값으로 변환한다. */
 FR_API_INLINE float frNumberMetersToPixels(float value) {
     return (FR_GLOBAL_PIXELS_PER_METER > 0.0f)
         ? (value * FR_GLOBAL_PIXELS_PER_METER)
         : 0.0f;
 }
 
-/* 주어진 픽셀 단위 `Rectangle` 구조체를 미터 단위 `Rectangle` 구조체로 변환한다. */
+/* 픽셀 단위의 `Rectangle` 구조체 `rec`을 미터 단위로 변환한다. */
 FR_API_INLINE Rectangle frRecPixelsToMeters(Rectangle rec) {
     return (Rectangle) {
         .x = frNumberPixelsToMeters(rec.x),
@@ -603,7 +603,7 @@ FR_API_INLINE Rectangle frRecPixelsToMeters(Rectangle rec) {
     };
 }
 
-/* 주어진 미터 단위 `Rectangle` 구조체를 픽셀 단위 `Rectangle` 구조체로 변환한다. */
+/* 미터 단위의 `Rectangle` 구조체 `rec`을 픽셀 단위로 변환한다. */
 FR_API_INLINE Rectangle frRecMetersToPixels(Rectangle rec) {
     return (Rectangle) {
         .x = frNumberMetersToPixels(rec.x),
@@ -654,7 +654,7 @@ FR_API_INLINE Vector2 frVec2Negate(Vector2 v) {
     return (Vector2) { -v.x, -v.y };
 }
 
-/* 벡터 `v`를 정규화한 새로운 벡터를 반환한다. */
+/* 벡터 `v`와 방향이 같은 새로운 단위 벡터를 반환한다. */
 FR_API_INLINE Vector2 frVec2Normalize(Vector2 v) {
     const float magnitude = frVec2Magnitude(v);
     
@@ -683,7 +683,7 @@ FR_API_INLINE Vector2 frVec2RightNormal(Vector2 v) {
     return frVec2Normalize((Vector2) { v.y, -v.x });
 }
 
-/* 영점을 기준으로 벡터 `v`를 `angle` (rad.)만큼 회전시킨 벡터를 반환한다. */
+/* 벡터 `v`를 영점을 기준으로 `angle` (rad.)만큼 회전시킨다. */
 FR_API_INLINE Vector2 frVec2Rotate(Vector2 v, float angle) {
     const float sin_angle = sinf(angle);
     const float cos_angle = cosf(angle);
@@ -696,14 +696,14 @@ FR_API_INLINE Vector2 frVec2Rotate(Vector2 v, float angle) {
 
 /* 벡터 `v`를 `tx`의 값에 따라 회전시킨다. */
 FR_API_INLINE Vector2 frVec2RotateTx(Vector2 v, frTransform tx) {
-    Vector2 w = {
-        (v.x * tx.cache.cos_a - v.y * tx.cache.sin_a),
-        (v.x * tx.cache.sin_a + v.y * tx.cache.cos_a)
+    Vector2 result = {
+        (v.x * tx.cache.cosA - v.y * tx.cache.sinA),
+        (v.x * tx.cache.sinA + v.y * tx.cache.cosA)
     };
 
-    if (!tx.cache.valid) w = frVec2Rotate(v, tx.rotation);
+    if (!tx.cache.valid) result = frVec2Rotate(v, tx.rotation);
 
-    return w;
+    return result;
 }
 
 /* 벡터 `v`를 `tx`의 값에 따라 평행 이동하고 회전시킨다. */

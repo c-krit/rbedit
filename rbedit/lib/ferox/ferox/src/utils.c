@@ -25,9 +25,13 @@
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
+/* | `utils` 모듈 매크로 정의... | */
+
+#define TWO_PI (2.0f * PI)
+
 /* | `utils` 모듈 상수... | */
 
-const float TWO_PI = (2.0f * PI), INVERSE_TWO_PI = (1.0f / TWO_PI);
+const float INVERSE_TWO_PI = (1.0f / TWO_PI);
 
 /* | `utils` 모듈 함수... | */
 
