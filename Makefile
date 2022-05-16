@@ -64,13 +64,17 @@ OBJECTS := $(SOURCES:.c=.o)
 # TODO: Edit the line below if you want another name for your executable
 TARGETS := $(BINARY_PATH)/$(PROJECT_PATH)
 
-HOST_PLATFORM := LINUX
+HOST_PLATFORM := UNKNOWN
 
 ifeq ($(OS),Windows_NT)
-	PROJECT_PREFIX := $(PROJECT_NAME):
+	ifeq "$(findstring ;,$(PATH))" ";"
+		PROJECT_PREFIX := $(PROJECT_FULL_NAME):
+	endif
+
+# MINGW-W64 or MSYS2...?
 	HOST_PLATFORM := WINDOWS
 else
-	UNAME = $(shell uname)
+	UNAME = $(shell uname 2>/dev/null)
 
 	ifeq ($(UNAME),Linux)
 		HOST_PLATFORM = LINUX
